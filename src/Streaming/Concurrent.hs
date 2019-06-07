@@ -20,7 +20,7 @@
 
  -}
 module Streaming.Concurrent
-  ( -- * Buffers
+  (-- * Buffers
     Buffer
   , unbounded
   , bounded
@@ -50,15 +50,15 @@ import           Streaming         (Of, Stream)
 import qualified Streaming.Prelude as S
 
 import           Control.Applicative             ((<|>))
-import           Control.Concurrent.Async.Lifted (concurrently,
+import           Control.Concurrent.STM          (check)
+import           Control.Monad                   (when)
+import           Data.Foldable                   (forM_)
+import           Control.Monad.IO.Unlift         (MonadUnliftIO)
+import           UnliftIO.Async                  (concurrently,
                                                   forConcurrently_,
                                                   replicateConcurrently_)
-import qualified Control.Concurrent.STM          as STM
-import           Control.Monad                   (when)
-import           Control.Monad.Base              (MonadBase, liftBase)
-import           Control.Monad.Catch             (MonadMask, bracket, finally)
-import           Control.Monad.Trans.Control     (MonadBaseControl)
-import           Data.Foldable                   (forM_)
+import           UnliftIO.Exception              (bracket, finally)
+import qualified UnliftIO.STM                    as STM
 
 --------------------------------------------------------------------------------
 
@@ -70,9 +70,9 @@ import           Data.Foldable                   (forM_)
 --   the final result.
 --
 --   @since 0.2.0.0
-withMergedStreams :: (MonadMask m, MonadBaseControl IO m, MonadBase IO n, Foldable t)
+withMergedStreams :: (MonadUnliftIO m, Foldable t)
                      => Buffer a -> t (Stream (Of a) m v)
-                     -> (Stream (Of a) n () -> m r) -> m r
+                     -> (Stream (Of a) m () -> m r) -> m r
 withMergedStreams buff strs f = withBuffer buff
                                            (forConcurrently_ strs . flip writeStreamBasket)
                                            (`withStreamBasket` f)
@@ -81,23 +81,23 @@ withMergedStreams buff strs f = withBuffer buff
 --
 --   Type written to make it easier if this is the only stream being
 --   written to the buffer.
-writeStreamBasket :: (MonadBase IO m) => Stream (Of a) m r -> InBasket a -> m ()
+writeStreamBasket :: (MonadUnliftIO m) => Stream (Of a) m r -> InBasket a -> m ()
 writeStreamBasket stream (InBasket send) = go stream
   where
     go str = do eNxt <- S.next str -- uncons requires r ~ ()
                 forM_ eNxt $ \(a, str') -> do
-                  continue <- liftBase (STM.atomically (send a))
+                  continue <- STM.atomically (send a)
                   when continue (go str')
 
 -- | Read the output of a buffer into a stream.
 --
 --   @since 0.2.0.0
-withStreamBasket :: (MonadBase IO m) => OutBasket a
+withStreamBasket :: (MonadUnliftIO m) => OutBasket a
                     -> (Stream (Of a) m () -> r)
                     -> r
 withStreamBasket (OutBasket receive) f = f (S.untilRight getNext)
   where
-    getNext = maybe (Right ()) Left <$> liftBase (STM.atomically receive)
+    getNext = maybe (Right ()) Left <$> STM.atomically receive
 
 --------------------------------------------------------------------------------
 
@@ -133,7 +133,7 @@ own custom mapping function in conjunction with
 --   Note: ordering of elements in the output is undeterministic.
 --
 --   @since 0.2.0.0
-withBufferedTransform :: (MonadMask m, MonadBaseControl IO m)
+withBufferedTransform :: (MonadUnliftIO m)
                          => Int
                             -- ^ How many concurrent computations to run.
                          -> (OutBasket a -> InBasket b -> m ab)
@@ -155,11 +155,11 @@ withBufferedTransform n transform feed consume =
 --   Note: ordering of elements in the output is undeterministic.
 --
 --   @since 0.2.0.0
-withStreamMap :: (MonadMask m, MonadBaseControl IO m, MonadBase IO n)
+withStreamMap :: (MonadUnliftIO m)
                  => Int -- ^ How many concurrent computations to run.
                  -> (a -> b)
                  -> Stream (Of a) m i
-                 -> (Stream (Of b) n () -> m r) -> m r
+                 -> (Stream (Of b) m () -> m r) -> m r
 withStreamMap n f inp cont =
   withBufferedTransform n transform feed consume
   where
@@ -175,11 +175,11 @@ withStreamMap n f inp cont =
 --   Note: ordering of elements in the output is undeterministic.
 --
 --   @since 0.2.0.0
-withStreamMapM :: (MonadMask m, MonadBaseControl IO m, MonadBase IO n)
+withStreamMapM :: (MonadUnliftIO m)
                   => Int -- ^ How many concurrent computations to run.
                   -> (a -> m b)
                   -> Stream (Of a) m i
-                  -> (Stream (Of b) n () -> m r) -> m r
+                  -> (Stream (Of b) m () -> m r) -> m r
 withStreamMapM n f inp cont =
   withBufferedTransform n transform feed consume
   where
@@ -195,11 +195,11 @@ withStreamMapM n f inp cont =
 --   Note: ordering of elements in the output is undeterministic.
 --
 --   @since 0.2.0.0
-withStreamTransform :: (MonadMask m, MonadBaseControl IO m, MonadBase IO n)
+withStreamTransform :: (MonadUnliftIO m)
                        => Int -- ^ How many concurrent computations to run.
                        -> (Stream (Of a) m () -> Stream (Of b) m t)
                        -> Stream (Of a) m i
-                       -> (Stream (Of b) n () -> m r) -> m r
+                       -> (Stream (Of b) m () -> m r) -> m r
 withStreamTransform n f inp cont =
   withBufferedTransform n transform feed consume
   where
@@ -213,8 +213,8 @@ withStreamTransform n f inp cont =
 --   place it into another 'Buffer.
 --
 --   @since 0.3.1.0
-joinBuffers :: (MonadBase IO m) => (a -> b) -> OutBasket a -> InBasket b -> m ()
-joinBuffers f obA ibB = liftBase go
+joinBuffers :: (MonadUnliftIO m) => (a -> b) -> OutBasket a -> InBasket b -> m ()
+joinBuffers f obA ibB = go
   where
     go = do ma <- STM.atomically (receiveMsg obA)
             forM_ ma $ \a ->
@@ -224,19 +224,19 @@ joinBuffers f obA ibB = liftBase go
 -- | As with 'joinBuffers' but apply a monadic function.
 --
 --   @since 0.3.1.0
-joinBuffersM :: (MonadBase IO m) => (a -> m b) -> OutBasket a -> InBasket b -> m ()
+joinBuffersM :: (MonadUnliftIO m) => (a -> m b) -> OutBasket a -> InBasket b -> m ()
 joinBuffersM f obA ibB = go
   where
-    go = do ma <- liftBase (STM.atomically (receiveMsg obA))
+    go = do ma <- STM.atomically (receiveMsg obA)
             forM_ ma $ \a ->
               do b <- f a
-                 s <- liftBase (STM.atomically (sendMsg ibB b))
+                 s <- STM.atomically (sendMsg ibB b)
                  when s go
 
 -- | As with 'joinBuffers' but read and write the values as 'Stream's.
 --
 --   @since 0.3.1.0
-joinBuffersStream :: (MonadBase IO m) => (Stream (Of a) m () -> Stream (Of b) m t)
+joinBuffersStream :: (MonadUnliftIO m) => (Stream (Of a) m () -> Stream (Of b) m t)
                      -> OutBasket a -> InBasket b -> m ()
 joinBuffersStream f obA ibB = withStreamBasket obA
                                 (flip writeStreamBasket ibB . f)
@@ -317,13 +317,13 @@ newtype InBasket a = InBasket { sendMsg :: a -> STM.STM Bool }
 --   However, reading a buffer that has not indicated that it is
 --   closed (e.g. waiting on an action to complete to be able to
 --   provide the next value) but contains no values will block.
-withBuffer :: (MonadMask m, MonadBaseControl IO m)
+withBuffer :: (MonadUnliftIO m)
               => Buffer a -> (InBasket a -> m i)
               -> (OutBasket a -> m r) -> m r
 withBuffer buffer sendIn readOut =
   bracket
-    (liftBase openBasket)
-    (\(_, _, _, seal) -> liftBase (STM.atomically seal)) $
+    openBasket
+    (\(_, _, _, seal) -> STM.atomically seal) $
       \(writeB, readB, sealed, seal) ->
         snd <$> concurrently (withIn writeB sealed seal)
                              (withOut readB sealed seal)
@@ -361,7 +361,7 @@ withBuffer buffer sendIn readOut =
     withIn writeB sealed seal =
       sendIn (InBasket sendOrEnd)
       `finally`
-      liftBase (STM.atomically seal)
+      STM.atomically seal
       where
         sendOrEnd a = do
           canWrite <- not <$> STM.readTVar sealed
@@ -371,10 +371,10 @@ withBuffer buffer sendIn readOut =
     withOut readB sealed seal =
       readOut (OutBasket readOrEnd)
       `finally`
-      liftBase (STM.atomically seal)
+      STM.atomically seal
       where
         readOrEnd = (Just <$> readB) <|> (do
           b <- STM.readTVar sealed
-          STM.check b
+          check b
           return Nothing )
 {-# INLINABLE withBuffer #-}

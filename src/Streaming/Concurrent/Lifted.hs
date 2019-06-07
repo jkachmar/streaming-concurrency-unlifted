@@ -47,8 +47,7 @@ import           Streaming.Concurrent  (Buffer, InBasket(..), OutBasket(..),
 import qualified Streaming.Concurrent  as SC
 import           Streaming.With.Lifted (Withable(..))
 
-import Control.Monad.Base          (MonadBase)
-import Control.Monad.Trans.Control (MonadBaseControl)
+import           Control.Monad.IO.Unlift (MonadUnliftIO)
 
 --------------------------------------------------------------------------------
 
@@ -57,7 +56,7 @@ import Control.Monad.Trans.Control (MonadBaseControl)
 --   The resulting order is unspecified.
 --
 --   @since 0.2.0.0
-withMergedStreams :: (Withable w, MonadBaseControl IO (WithMonad w), MonadBase IO m, Foldable t)
+withMergedStreams :: (Withable w, m ~ WithMonad w, MonadUnliftIO m, Foldable t)
                      => Buffer a -> t (Stream (Of a) (WithMonad w) v)
                      -> w (Stream (Of a) m ())
 withMergedStreams buff strs = liftWith (SC.withMergedStreams buff strs)
@@ -66,7 +65,7 @@ withMergedStreams buff strs = liftWith (SC.withMergedStreams buff strs)
 --
 --   Type written to make it easier if this is the only stream being
 --   written to the buffer.
-writeStreamBasket :: (Withable w, MonadBase IO (WithMonad w))
+writeStreamBasket :: (Withable w, MonadUnliftIO (WithMonad w))
                      => Stream (Of a) (WithMonad w) r -> InBasket a -> w ()
 writeStreamBasket stream ib = liftAction (SC.writeStreamBasket stream ib)
 
@@ -75,7 +74,7 @@ writeStreamBasket stream ib = liftAction (SC.writeStreamBasket stream ib)
 --   Note that there is no requirement that @m ~ WithMonad w@.
 --
 --   @since 0.2.0.0
-withStreamBasket :: (Withable w, MonadBase IO m) => OutBasket a -> w (Stream (Of a) m ())
+withStreamBasket :: (Withable w, MonadUnliftIO m) => OutBasket a -> w (Stream (Of a) m ())
 withStreamBasket ob = liftWith (SC.withStreamBasket ob)
 
 -- | Use buffers to concurrently transform the provided data.
@@ -88,7 +87,7 @@ withStreamBasket ob = liftWith (SC.withStreamBasket ob)
 --   Note: ordering of elements in the output is undeterministic.
 --
 --   @since 0.2.0.0
-withBufferedTransform :: (Withable w, MonadBaseControl IO (WithMonad w))
+withBufferedTransform :: (Withable w, MonadUnliftIO (WithMonad w))
                          => Int
                             -- ^ How many concurrent computations to run.
                          -> (OutBasket a -> InBasket b -> WithMonad w ab)
@@ -127,11 +126,11 @@ own custom mapping function in conjunction with
 --   Note: ordering of elements in the output is undeterministic.
 --
 --   @since 0.2.0.0
-withStreamMap :: (Withable w, MonadBaseControl IO (WithMonad w), MonadBase IO n)
+withStreamMap :: (Withable w, m ~ WithMonad w, MonadUnliftIO m)
                  => Int -- ^ How many concurrent computations to run.
                  -> (a -> b)
                  -> Stream (Of a) (WithMonad w) i
-                 -> w (Stream (Of b) n ())
+                 -> w (Stream (Of b) m ())
 withStreamMap n f inp = liftWith (SC.withStreamMap n f inp)
 
 -- | Concurrently map a monadic function over all elements of a
@@ -140,11 +139,11 @@ withStreamMap n f inp = liftWith (SC.withStreamMap n f inp)
 --   Note: ordering of elements in the output is undeterministic.
 --
 --   @since 0.2.0.0
-withStreamMapM :: (Withable w, MonadBaseControl IO (WithMonad w), MonadBase IO n)
+withStreamMapM :: (Withable w, m ~ WithMonad w, MonadUnliftIO m)
                   => Int -- ^ How many concurrent computations to run.
                   -> (a -> WithMonad w b)
                   -> Stream (Of a) (WithMonad w) i
-                  -> w (Stream (Of b) n ())
+                  -> w (Stream (Of b) m ())
 withStreamMapM n f inp = liftWith (SC.withStreamMapM n f inp)
 
 -- | Concurrently split the provided stream into @n@ streams and
@@ -153,12 +152,11 @@ withStreamMapM n f inp = liftWith (SC.withStreamMapM n f inp)
 --   Note: ordering of elements in the output is undeterministic.
 --
 --   @since 0.2.0.0
-withStreamTransform :: ( Withable w, m ~ WithMonad w, MonadBaseControl IO m
-                       , MonadBase IO n)
+withStreamTransform :: (Withable w, m ~ WithMonad w, MonadUnliftIO m)
                        => Int -- ^ How many concurrent computations to run.
                        -> (Stream (Of a) m () -> Stream (Of b) m t)
                        -> Stream (Of a) m i
-                       -> w (Stream (Of b) n ())
+                       -> w (Stream (Of b) m ())
 withStreamTransform n f inp = liftWith (SC.withStreamTransform n f inp)
 
 -- | Use a buffer to asynchronously communicate.
@@ -177,6 +175,6 @@ withStreamTransform n f inp = liftWith (SC.withStreamTransform n f inp)
 --   However, reading a buffer that has not indicated that it is
 --   closed (e.g. waiting on an action to complete to be able to
 --   provide the next value) but contains no values will block.
-withBuffer :: (Withable w, MonadBaseControl IO (WithMonad w))
+withBuffer :: (Withable w, MonadUnliftIO (WithMonad w))
               => Buffer a -> (InBasket a -> WithMonad w i) -> w (OutBasket a)
 withBuffer buffer sendIn = liftWith (SC.withBuffer buffer sendIn)
