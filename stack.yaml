@@ -3,3 +3,5 @@ packages:
   - '.'
 extra-deps:
   - streaming-with-0.2.2.1
+  - testbench-0.2.1.3
+  - streaming-cassava-0.1.0.1

@@ -11,6 +11,20 @@ packages:
       sha256: 2348c80d121b8aae5d6dc462ad0bab28856c3aa58d62f16da9a6da190c1f59cc
   original:
     hackage: streaming-with-0.2.2.1
+- completed:
+    hackage: testbench-0.2.1.3@sha256:082bdf900413da5c96e0a93e132996fcf6770d1d4b7245f8dce30da0d626253e,3015
+    pantry-tree:
+      size: 572
+      sha256: 521d0a3bf8f688726c66038b3c3809401cdaa7483c61b3004dd80260baa487e3
+  original:
+    hackage: testbench-0.2.1.3
+- completed:
+    hackage: streaming-cassava-0.1.0.1@sha256:2d1dfeb09af62009e88311fe92f44d06dafb5cdd38879b437ea6adb3bc40acfe,1739
+    pantry-tree:
+      size: 386
+      sha256: f6146cd660354052a07bd947fc4ced806d5ebaa38ea80d632b98eec41b325d54
+  original:
+    hackage: streaming-cassava-0.1.0.1
 snapshots:
 - completed:
     size: 498402

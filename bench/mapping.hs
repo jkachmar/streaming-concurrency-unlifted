@@ -48,11 +48,10 @@ import Streaming.Concurrent (Buffer, InBasket(..), OutBasket(..), bounded,
                              writeStreamBasket)
 
 import           Control.Concurrent              (threadDelay)
-import           Control.Concurrent.Async.Lifted (replicateConcurrently_)
-import           Control.Monad.Catch             (MonadMask)
-import           Control.Monad.Trans.Control     (MonadBaseControl)
+import           Control.Monad.IO.Unlift         (MonadUnliftIO)
 import           Streaming
 import qualified Streaming.Prelude               as S
+import           UnliftIO.Async                  (replicateConcurrently_)
 
 import Test.HUnit ((@?))
 import TestBench
@@ -65,13 +64,13 @@ main = testBench $ do
     compareFuncAllIO "show" (pureMap 10 show inputs S.toList_) normalFormIO
     collection "Fibonacci" $
       mapM_ compFib numThreads
-  collection "Monadic maps" $ do
-    collection "Fibonacci (return'ed)" $
-      mapM_ compFibM numThreads
-    collection "Identical sleep" $
-      mapM_ compDelaySame numThreads
-    collection "Different sleep" $
-      mapM_ compDelayDiffer numThreads
+--   collection "Monadic maps" $ do
+--     collection "Fibonacci (return'ed)" $
+--       mapM_ compFibM numThreads
+--     collection "Identical sleep" $
+--       mapM_ compDelaySame numThreads
+--     collection "Different sleep" $
+--       mapM_ compDelayDiffer numThreads
   where
     compFib n = compareFuncAllIO (show n ++ " tasks")
                                  (pureMap n fib inputs S.toList_)
@@ -162,7 +161,7 @@ withStreamMapMN _ f str cont = cont (S.mapM f str)
 --------------------------------------------------------------------------------
 -- Bounded buffer variants
 
-withStreamMapBI :: (MonadMask m, MonadBaseControl IO m)
+withStreamMapBI :: (MonadUnliftIO m)
                    => Int -- ^ How many concurrent computations to run.
                    -> (a -> b)
                    -> Stream (Of a) m ()
@@ -174,7 +173,7 @@ withStreamMapBI n f inp cont =
 
     consume = flip withStreamBasket cont
 
-withStreamMapMBI :: (MonadMask m, MonadBaseControl IO m)
+withStreamMapMBI :: (MonadUnliftIO m)
                     => Int -- ^ How many concurrent computations to run.
                     -> (a -> m b)
                     -> Stream (Of a) m ()
@@ -186,21 +185,21 @@ withStreamMapMBI n f inp cont =
 
     consume = flip withStreamBasket cont
 
-withStreamMapBS :: (MonadMask m, MonadBaseControl IO m)
+withStreamMapBS :: (MonadUnliftIO m)
                    => Int -- ^ How many concurrent computations to run.
                    -> (a -> b)
                    -> Stream (Of a) m ()
                    -> (Stream (Of b) m () -> m r) -> m r
 withStreamMapBS n = withStreamTransformB n . S.map
 
-withStreamMapMBS :: (MonadMask m, MonadBaseControl IO m)
+withStreamMapMBS :: (MonadUnliftIO m)
                     => Int -- ^ How many concurrent computations to run.
                     -> (a -> m b)
                     -> Stream (Of a) m ()
                     -> (Stream (Of b) m () -> m r) -> m r
 withStreamMapMBS n = withStreamTransformB n . S.mapM
 
-withStreamTransformB :: (MonadMask m, MonadBaseControl IO m)
+withStreamTransformB :: (MonadUnliftIO m)
                         => Int -- ^ How many concurrent computations to run.
                         -> (Stream (Of a) m () -> Stream (Of b) m t)
                         -> Stream (Of a) m ()
@@ -212,7 +211,7 @@ withStreamTransformB n f inp cont =
 
     consume = flip withStreamBasket cont
 
-withBufferedTransformB :: (MonadMask m, MonadBaseControl IO m)
+withBufferedTransformB :: (MonadUnliftIO m)
                           => Int
                              -- ^ How many concurrent computations to run.
                           -> (OutBasket a -> InBasket b -> m ab)
@@ -232,7 +231,7 @@ withBufferedTransformB n transform feed consume =
 --------------------------------------------------------------------------------
 -- Double-Bounded buffer variants
 
-withStreamMapDI :: (MonadMask m, MonadBaseControl IO m)
+withStreamMapDI :: (MonadUnliftIO m)
                    => Int -- ^ How many concurrent computations to run.
                    -> (a -> b)
                    -> Stream (Of a) m ()
@@ -244,7 +243,7 @@ withStreamMapDI n f inp cont =
 
     consume = flip withStreamBasket cont
 
-withStreamMapMDI :: (MonadMask m, MonadBaseControl IO m)
+withStreamMapMDI :: (MonadUnliftIO m)
                     => Int -- ^ How many concurrent computations to run.
                     -> (a -> m b)
                     -> Stream (Of a) m ()
@@ -256,21 +255,21 @@ withStreamMapMDI n f inp cont =
 
     consume = flip withStreamBasket cont
 
-withStreamMapDS :: (MonadMask m, MonadBaseControl IO m)
+withStreamMapDS :: (MonadUnliftIO m)
                    => Int -- ^ How many concurrent computations to run.
                    -> (a -> b)
                    -> Stream (Of a) m ()
                    -> (Stream (Of b) m () -> m r) -> m r
 withStreamMapDS n = withStreamTransformD n . S.map
 
-withStreamMapMDS :: (MonadMask m, MonadBaseControl IO m)
+withStreamMapMDS :: (MonadUnliftIO m)
                     => Int -- ^ How many concurrent computations to run.
                     -> (a -> m b)
                     -> Stream (Of a) m ()
                     -> (Stream (Of b) m () -> m r) -> m r
 withStreamMapMDS n = withStreamTransformD n . S.mapM
 
-withStreamTransformD :: (MonadMask m, MonadBaseControl IO m)
+withStreamTransformD :: (MonadUnliftIO m)
                         => Int -- ^ How many concurrent computations to run.
                         -> (Stream (Of a) m () -> Stream (Of b) m t)
                         -> Stream (Of a) m ()
@@ -282,7 +281,7 @@ withStreamTransformD n f inp cont =
 
     consume = flip withStreamBasket cont
 
-withBufferedTransformD :: (MonadMask m, MonadBaseControl IO m)
+withBufferedTransformD :: (MonadUnliftIO m)
                           => Int
                              -- ^ How many concurrent computations to run.
                           -> (OutBasket a -> InBasket b -> m ab)
@@ -301,7 +300,7 @@ withBufferedTransformD n transform feed consume =
 
 --------------------------------------------------------------------------------
 
-withStreamMapUI :: (MonadMask m, MonadBaseControl IO m)
+withStreamMapUI :: (MonadUnliftIO m)
                    => Int -- ^ How many concurrent computations to run.
                    -> (a -> b)
                    -> Stream (Of a) m ()
@@ -313,7 +312,7 @@ withStreamMapUI n f inp cont =
 
     consume = flip withStreamBasket cont
 
-withStreamMapMUI :: (MonadMask m, MonadBaseControl IO m)
+withStreamMapMUI :: (MonadUnliftIO m)
                     => Int -- ^ How many concurrent computations to run.
                     -> (a -> m b)
                     -> Stream (Of a) m ()
@@ -325,21 +324,21 @@ withStreamMapMUI n f inp cont =
 
     consume = flip withStreamBasket cont
 
-withStreamMapUS :: (MonadMask m, MonadBaseControl IO m)
+withStreamMapUS :: (MonadUnliftIO m)
                    => Int -- ^ How many concurrent computations to run.
                    -> (a -> b)
                    -> Stream (Of a) m ()
                    -> (Stream (Of b) m () -> m r) -> m r
 withStreamMapUS n = withStreamTransformU n . S.map
 
-withStreamMapMUS :: (MonadMask m, MonadBaseControl IO m)
+withStreamMapMUS :: (MonadUnliftIO m)
                     => Int -- ^ How many concurrent computations to run.
                     -> (a -> m b)
                     -> Stream (Of a) m ()
                     -> (Stream (Of b) m () -> m r) -> m r
 withStreamMapMUS n = withStreamTransformU n . S.mapM
 
-withStreamTransformU :: (MonadMask m, MonadBaseControl IO m)
+withStreamTransformU :: (MonadUnliftIO m)
                         => Int -- ^ How many concurrent computations to run.
                         -> (Stream (Of a) m () -> Stream (Of b) m t)
                         -> Stream (Of a) m ()
@@ -351,7 +350,7 @@ withStreamTransformU n f inp cont =
 
     consume = flip withStreamBasket cont
 
-withBufferedTransformU :: (MonadMask m, MonadBaseControl IO m)
+withBufferedTransformU :: (MonadUnliftIO m)
                           => Int
                              -- ^ How many concurrent computations to run.
                           -> (OutBasket a -> InBasket b -> m ab)
